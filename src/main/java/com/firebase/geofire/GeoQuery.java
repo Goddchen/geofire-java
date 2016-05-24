@@ -28,11 +28,14 @@
 
 package com.firebase.geofire;
 
-import com.firebase.client.*;
 import com.firebase.geofire.core.GeoHash;
 import com.firebase.geofire.core.GeoHashQuery;
 import com.firebase.geofire.util.GeoUtils;
+import com.google.firebase.database.*;
+import com.google.firebase.database.core.DatabaseConfig;
+import com.google.firebase.database.core.EventTarget;
 
+import java.lang.reflect.Field;
 import java.util.*;
 
 /**
@@ -40,18 +43,14 @@ import java.util.*;
  */
 public class GeoQuery {
 
-    private static class LocationInfo {
-        final GeoLocation location;
-        final boolean inGeoQuery;
-        final GeoHash geoHash;
-
-        public LocationInfo(GeoLocation location, boolean inGeoQuery) {
-            this.location = location;
-            this.inGeoQuery = inGeoQuery;
-            this.geoHash = new GeoHash(location);
-        }
-    }
-
+    private final GeoFire geoFire;
+    private final Set<GeoQueryEventListener> eventListeners = new HashSet<GeoQueryEventListener>();
+    private final Map<GeoHashQuery, Query> firebaseQueries = new HashMap<GeoHashQuery, Query>();
+    private final Set<GeoHashQuery> outstandingQueries = new HashSet<GeoHashQuery>();
+    private final Map<String, LocationInfo> locationInfos = new HashMap<String, LocationInfo>();
+    private GeoLocation center;
+    private double radius;
+    private Set<GeoHashQuery> queries;
     private final ChildEventListener childEventLister = new ChildEventListener() {
         @Override
         public void onChildAdded(DataSnapshot dataSnapshot, String s) {
@@ -80,20 +79,10 @@ public class GeoQuery {
         }
 
         @Override
-        public synchronized void onCancelled(FirebaseError firebaseError) {
+        public synchronized void onCancelled(DatabaseError firebaseError) {
             // ignore, our API does not support onCancelled
         }
     };
-
-    private final GeoFire geoFire;
-    private final Set<GeoQueryEventListener> eventListeners = new HashSet<GeoQueryEventListener>();
-    private final Map<GeoHashQuery, Query> firebaseQueries = new HashMap<GeoHashQuery, Query>();
-    private final Set<GeoHashQuery> outstandingQueries = new HashSet<GeoHashQuery>();
-    private final Map<String, LocationInfo> locationInfos = new HashMap<String, LocationInfo>();
-    private GeoLocation center;
-    private double radius;
-    private Set<GeoHashQuery> queries;
-
     /**
      * Creates a new GeoQuery object centered at the given location and with the given radius.
      * @param geoFire The GeoFire object this GeoQuery uses
@@ -112,8 +101,23 @@ public class GeoQuery {
     }
 
     private void postEvent(Runnable r) {
-        EventTarget target = Firebase.getDefaultConfig().getEventTarget();
-        target.postEvent(r);
+        try {
+            Field databaseConfigField = FirebaseDatabase.class.getField("config");
+            if (databaseConfigField != null) {
+                DatabaseConfig databaseConfig =
+                        (DatabaseConfig) databaseConfigField.get(FirebaseDatabase.getInstance());
+                if (databaseConfig != null) {
+                    EventTarget eventTarget = databaseConfig.getEventTarget();
+                    if (eventTarget != null) {
+                        eventTarget.postEvent(r);
+                    }
+                }
+            }
+        } catch (NoSuchFieldException e) {
+            // ...
+        } catch (IllegalAccessException e) {
+            // ..
+        }
     }
 
     private void updateLocationInfo(final String key, final GeoLocation location) {
@@ -209,7 +213,7 @@ public class GeoQuery {
             }
 
             @Override
-            public void onCancelled(final FirebaseError firebaseError) {
+            public void onCancelled(final DatabaseError firebaseError) {
                 synchronized (GeoQuery.this) {
                     for (final GeoQueryEventListener listener : GeoQuery.this.eventListeners) {
                         postEvent(new Runnable() {
@@ -238,7 +242,7 @@ public class GeoQuery {
         for (final GeoHashQuery query: newQueries) {
             if (!oldQueries.contains(query)) {
                 outstandingQueries.add(query);
-                Firebase firebase = this.geoFire.getFirebase();
+                DatabaseReference firebase = this.geoFire.getFirebase();
                 Query firebaseQuery = firebase.orderByChild("g").startAt(query.getStartValue()).endAt(query.getEndValue());
                 firebaseQuery.addChildEventListener(this.childEventLister);
                 addValueToReadyListener(firebaseQuery, query);
@@ -307,7 +311,7 @@ public class GeoQuery {
                 }
 
                 @Override
-                public void onCancelled(FirebaseError firebaseError) {
+                public void onCancelled(DatabaseError firebaseError) {
                     // tough luck
                 }
             });
@@ -414,6 +418,18 @@ public class GeoQuery {
         this.radius = radius * 1000;
         if (this.hasListeners()) {
             this.setupQueries();
+        }
+    }
+
+    private static class LocationInfo {
+        final GeoLocation location;
+        final boolean inGeoQuery;
+        final GeoHash geoHash;
+
+        public LocationInfo(GeoLocation location, boolean inGeoQuery) {
+            this.location = location;
+            this.inGeoQuery = inGeoQuery;
+            this.geoHash = new GeoHash(location);
         }
     }
 }
