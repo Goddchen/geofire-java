@@ -32,6 +32,7 @@ package com.firebase.geofire;
 import com.firebase.geofire.core.GeoHash;
 import com.google.firebase.database.*;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +109,7 @@ public class GeoFire {
         GeoHash geoHash = new GeoHash(location);
         Map<String, Object> updates = new HashMap<String, Object>();
         updates.put("g", geoHash.getGeoHashString());
-        updates.put("l", new double[]{location.latitude, location.longitude});
+        updates.put("l", Arrays.asList(location.latitude, location.longitude));
         if (completionListener != null) {
             keyRef.setValue(updates, geoHash.getGeoHashString(), new DatabaseReference.CompletionListener() {
                 @Override
