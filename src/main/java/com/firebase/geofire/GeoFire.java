@@ -54,7 +54,10 @@ public class GeoFire {
 
     static GeoLocation getLocationValue(DataSnapshot dataSnapshot) {
         try {
-            Map data = dataSnapshot.getValue(Map.class);
+            GenericTypeIndicator<Map<String, Object>> genericTypeIndicator =
+                    new GenericTypeIndicator<Map<String, Object>>() {
+                    };
+            Map data = dataSnapshot.getValue(genericTypeIndicator);
             List<?> location = (List<?>) data.get("l");
             Number latitudeObj = (Number)location.get(0);
             Number longitudeObj = (Number)location.get(1);

@@ -32,10 +32,7 @@ import com.firebase.geofire.core.GeoHash;
 import com.firebase.geofire.core.GeoHashQuery;
 import com.firebase.geofire.util.GeoUtils;
 import com.google.firebase.database.*;
-import com.google.firebase.database.core.DatabaseConfig;
-import com.google.firebase.database.core.EventTarget;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
 /**
@@ -101,23 +98,7 @@ public class GeoQuery {
     }
 
     private void postEvent(Runnable r) {
-        try {
-            Field databaseConfigField = FirebaseDatabase.class.getField("config");
-            if (databaseConfigField != null) {
-                DatabaseConfig databaseConfig =
-                        (DatabaseConfig) databaseConfigField.get(FirebaseDatabase.getInstance());
-                if (databaseConfig != null) {
-                    EventTarget eventTarget = databaseConfig.getEventTarget();
-                    if (eventTarget != null) {
-                        eventTarget.postEvent(r);
-                    }
-                }
-            }
-        } catch (NoSuchFieldException e) {
-            // ...
-        } catch (IllegalAccessException e) {
-            // ..
-        }
+        r.run();
     }
 
     private void updateLocationInfo(final String key, final GeoLocation location) {
